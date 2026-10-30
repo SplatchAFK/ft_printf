@@ -6,7 +6,13 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/30 11:54:30 by romasant          #+#    #+#             */
-/*   Updated: 2026/10/30 12:15:57 by romasant         ###   ########.fr       */
+/*   Updated: 2026/10/30 12:24:04 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
+#include "printf.h"
+
+int	ft_printf(const char *s, ...)
+{
+	return (0);
+}

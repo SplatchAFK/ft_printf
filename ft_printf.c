@@ -12,14 +12,29 @@
 
 #include "ft_printf.h"
 
-static void	ft_conversions_main(const char *s, va_list ap)
+static int	ft_redirection(va_list ap, const char *s, size_t counter)
 {
-	char	*address_s;
-
-	address_s = ft_strchr(s, '%');
-	address_s++;
-	if (*address_s == 'd')
+	counter++;
+	if (s[counter] == 'd')
 		ft_conversion_int(ap);
+	else if (s[counter] == 'c')
+		ft_conversion_char(ap);
+	else
+		ft_putchar_fd(s[counter], 1);
+	return (counter);
+}
+
+static void	ft_conversion_main(const char *s, va_list ap)
+{
+	size_t (counter) = 0;
+	while (counter < ft_strlen(s))
+	{
+		if (s[counter] == '%' && s[counter  + 1])
+			counter = ft_redirection(ap, s, counter);
+		else
+			ft_putchar_fd(s[counter], 1);
+		counter++;
+	}
 }
 
 int	ft_printf(const char *s, ...)
@@ -27,7 +42,7 @@ int	ft_printf(const char *s, ...)
 	va_list	ap;
 
 	va_start(ap, s);
-	ft_conversions_main(s, ap);
+	ft_conversion_main(s, ap);
 	va_end(ap);
 	return (0);
 }

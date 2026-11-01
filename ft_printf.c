@@ -6,7 +6,7 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/30 11:54:30 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/01 21:44:44 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/01 21:51:43 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,7 @@
 static int	ft_redirection(va_list ap, const char *s, size_t counter)
 {
 	counter++;
-	if (s[counter] == 'd')
+	if (s[counter] == 'd' || s[counter] == 'i')
 		ft_conversion_int(ap);
 	else if (s[counter] == 'c')
 		ft_conversion_char(ap);

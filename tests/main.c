@@ -6,7 +6,7 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/01 21:45:13 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/01 21:45:14 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/01 21:51:10 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,6 +14,7 @@
 
 int	main(void)
 {
-	ft_printf("Salut je suis a %d", 42);
+	ft_printf("  Ma fonction : %d   %i\n", 42, 42);
+	printf("Vrai fonction : %d   %i", 42, 42);
 	return (0);
 }

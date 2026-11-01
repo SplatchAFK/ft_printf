@@ -1,4 +1,4 @@
-/* ************************************************************************** */
+	/* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
 /*   ft_printf.c                                        :+:      :+:    :+:   */
@@ -14,16 +14,12 @@
 
 static void	ft_conversions_main(const char *s, va_list ap)
 {
-	int		n;
 	char	*address_s;
 
 	address_s = ft_strchr(s, '%');
 	address_s++;
 	if (*address_s == 'd')
-	{
-		n = va_arg(ap, int);
-		ft_putnbr_fd(n, 1);
-	}
+		ft_conversion_int(ap);
 }
 
 int	ft_printf(const char *s, ...)

@@ -2,3 +2,5 @@
 *.test
 *.a
 subject/
+a.out
+

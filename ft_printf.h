@@ -18,6 +18,7 @@
 # include <stdarg.h>
 # include "libft/libft.h"
 
-int	ft_printf(const char *s, ...);
+int		ft_printf(const char *s, ...);
+void	ft_conversion_int(va_list ap);
 
 #endif

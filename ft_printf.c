@@ -1,4 +1,4 @@
-	/* ************************************************************************** */
+/* ************************************************************************** */
 /*                                                                            */
 /*                                                        :::      ::::::::   */
 /*   ft_printf.c                                        :+:      :+:    :+:   */
@@ -6,7 +6,7 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/30 11:54:30 by romasant          #+#    #+#             */
-/*   Updated: 2026/10/31 15:51:17 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/01 21:44:44 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,7 +29,7 @@ static void	ft_conversion_main(const char *s, va_list ap)
 	size_t (counter) = 0;
 	while (counter < ft_strlen(s))
 	{
-		if (s[counter] == '%' && s[counter  + 1])
+		if (s[counter] == '%' && s[counter + 1])
 			counter = ft_redirection(ap, s, counter);
 		else
 			ft_putchar_fd(s[counter], 1);

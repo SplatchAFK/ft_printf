@@ -16,10 +16,16 @@
 # include <stdlib.h>
 # include <stdio.h>
 # include <stdarg.h>
+# include <limits.h>
 # include "libft/libft.h"
 
 int		ft_printf(const char *s, ...);
-void	ft_conversion_int(va_list ap);
-void	ft_conversion_char(va_list ap);
+int		ft_aff_int(va_list ap);
+int		ft_aff_char(va_list ap);
+int		ft_aff_string(va_list ap);
+int		ft_aff_address(va_list ap);
+int		ft_aff_hexa(va_list ap, char choice);
+int		ft_aff_percentage(void);
+int		ft_aff_unsigned_int(va_list ap);
 
 #endif

@@ -12,23 +12,30 @@
 
 CC = cc
 CFLAGS = -c -Wall -Wextra -Werror -g
-SRCS = ft_printf.c ft_conversion_int.c ft_conversion_char.c
+SRCS = ft_printf.c ft_parsing.c ft_manage_int.c
 
 OBJS = $(SRCS:.c=.o)
 NAME = libftprintf.a
+LIBFT = libft/libft.a
 
 all: $(NAME)
 
-$(NAME): $(OBJS)
+$(LIBFT):
+	$(MAKE) -C libft
+
+$(NAME): $(LIBFT) $(OBJS)
+	cp $(LIBFT) $(NAME)
 	ar rcs $(NAME) $(OBJS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
+	$(MAKE) -C libft clean
 	rm -f $(OBJS)
 
 fclean: clean
+	$(MAKE) -C libft fclean
 	rm -f $(NAME)
 
 re: fclean all

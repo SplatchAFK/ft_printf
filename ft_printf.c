@@ -5,72 +5,57 @@
 /*                                                    +:+ +:+         +:+     */
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/10/30 11:54:30 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/05 14:26:44 by romasant         ###   ########.fr       */
+/*   Created: 2026/11/06 18:05:04 by romasant          #+#    #+#             */
+/*   Updated: 2026/11/07 21:49:57 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "ft_printf.h"
 
-static int	ft_parsing(va_list ap, const char *s, size_t counter)
+static int	ft_verif_char(const char *s, int counter, va_list ap, int *flag)
 {
-	int	result_nb;
+	int		result_parsing;
+	int		size_conversion;
 
-	result_nb = 0;
-	if (s[counter] == 'd' || s[counter] == 'i')
-		result_nb = ft_aff_int(ap);
-	else if (s[counter] == 'c')
-		result_nb = ft_aff_char(ap);
-	else if (s[counter] == 's')
-		result_nb = ft_aff_string(ap);
-	else if (s[counter] == 'p')
-		result_nb = ft_aff_address(ap);
-	else if (s[counter] == 'x')
-		result_nb = ft_aff_hexa(ap, 'x');
-	else if (s[counter] == 'X')
-		result_nb = ft_aff_hexa(ap, 'X');
-	else if (s[counter] == '%')
-		return (ft_aff_percentage());
-	else if (s[counter] == 'u')
-		result_nb = ft_aff_unsigned_int(ap);
-	else
-		ft_putchar_fd(s[counter], 1);
-	return (result_nb);
-}
-
-static int	ft_conversion_main(const char *s, va_list ap)
-{
-	int		nb_str_return;
-	int		result_nb_parsing;
-	size_t	counter;
-
-	nb_str_return = 0;
-	counter = 0;
-	result_nb_parsing = 0;
-	while (counter < ft_strlen(s))
+	result_parsing = 0;
+	size_conversion = 0;
+	*flag = 0;
+	if (s[counter] == '%' && s[counter + 1])
 	{
-		if (s[counter] == '%' && s[counter + 1])
-		{
-			counter++;
-			result_nb_parsing = result_nb_parsing + ft_parsing(ap, s, counter);
-		}
-		else
-		{
-			ft_putchar_fd(s[counter], 1);
-			nb_str_return++;
-		}
-		counter++;
+		result_parsing = ft_parsing(s, counter);
+		if (result_parsing >= 1 && result_parsing <= 8)
+			size_conversion = ft_apply(ap, result_parsing);
+		*flag = 1;
 	}
-	return (nb_str_return + result_nb_parsing);
+	else
+		write(1, &s[counter], 1);
+	if (size_conversion == -1)
+		return (-1);
+	return (size_conversion);
 }
 
 int	ft_printf(const char *s, ...)
 {
 	va_list	ap;
-	int		nb;
 
 	va_start(ap, s);
-	nb = ft_conversion_main(s, ap);
+	int (counter) = 0;
+	int (flag) = 0;
+	int (size_conversion_final) = 0;
+	while (s[counter])
+	{
+		size_conversion_final += ft_verif_char(s, counter, ap, &flag);
+		size_conversion_final++;
+		if (size_conversion_final == -1)
+			return (-1);
+		if (flag == 1)
+		{
+			size_conversion_final--;
+			counter++;
+		}
+		counter++;
+		//printf("\n[%c][%d] [%d]\n", s[counter], counter, size_conversion_final);
+	}
 	va_end(ap);
-	return (nb);
+	return (size_conversion_final);
 }

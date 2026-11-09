@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - cas limites, write en échec, malloc qui échoue */
+/* Le testeur des fous · version printf - cas limites, write en échec, malloc qui échoue */
 #include "tdf_tests.h"
 #include <stdlib.h>
 #include <string.h>

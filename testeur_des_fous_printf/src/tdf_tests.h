@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - macros de test */
+/* Le testeur des fous · version printf - macros de test */
 #ifndef TDF_TESTS_H
 # define TDF_TESTS_H
 # include "tdf.h"

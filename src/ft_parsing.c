@@ -6,31 +6,46 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/06 18:09:26 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/07 21:19:36 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/09 19:15:59 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "../includes/ft_printf.h"
 
 static int	ft_apply_int(va_list ap, int result)
 {
 	int (result_size_int) = 0;
 	if (result == 1)
-		return (result);
-	result_size_int = ft_manage_integer(ap);
+		result_size_int = ft_manage_unsigned_int(ap);
+	else
+		result_size_int = ft_manage_integer(ap);
 	if (!result_size_int)
 		return (-1);
 	return (result_size_int);
 }
 
-static int	ft_apply_char(int result)
+static int	ft_apply_char(va_list ap, int result)
 {
-	return (result);
+	int (result_size_char) = 0;
+	if (result == 3)
+		result_size_char = ft_manage_char(ap);
+	else if (result == 4)
+		result_size_char = ft_manage_string(ap);
+	if (result_size_char == -1)
+		return (-1);
+	return (result_size_char);
 }
 
-static int	ft_apply_other(int result)
+static int	ft_apply_other(va_list ap, int result)
 {
-	return (result);
+	int (result_size_other) = 0;
+	if (result == 5 || result == 6)
+		result_size_other = ft_manage_hexa(ap, result);
+	else if (result == 7)
+		result_size_other = ft_manage_void(ap);
+	if (!result_size_other)
+		return (-1);
+	return (result_size_other);
 }
 
 int	ft_apply(va_list ap, int result)
@@ -39,15 +54,15 @@ int	ft_apply(va_list ap, int result)
 	if (result == 1 || result == 2)
 		size_conversion = ft_apply_int(ap, result);
 	else if (result == 3 || result == 4)
-		size_conversion = ft_apply_char(result);
+		size_conversion = ft_apply_char(ap, result);
 	else if (result == 5 || result == 6 || result == 7)
-		size_conversion = ft_apply_other(result);
+		size_conversion = ft_apply_other(ap, result);
 	else if (result == 8)
 	{
 		ft_putchar_fd('%', 1);
 		return (1);
 	}
-	if (!size_conversion)
+	if (size_conversion == -1)
 		return (-1);
 	return (size_conversion);
 }

@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - point d'entrée du programme de test */
+/* Le testeur des fous · version printf - point d'entrée du programme de test */
 #include "tdf.h"
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +9,8 @@ static void	usage(void)
 {
 	dprintf(2, "usage : tdf_runner [--only CAT[,CAT]] [--seed N] [--stress N] "
 		"[--timeout S] [--bonus|--no-bonus] [-v]\n"
-		"        [--project DIR] [--srclist FICHIER] [--vglogdir DIR] [--exe CHEMIN]\n");
+		"        [--project DIR] [--srclist FICHIER] [--vglogdir DIR] [--exe CHEMIN]\n"
+		"        [--aide 0|1|2] [--machine FICHIER]\n");
 	exit(2);
 }
 
@@ -18,6 +19,7 @@ static void	parse(int ac, char **av)
 	int	i;
 
 	g_opt.stress_n = 10000;
+	g_opt.help = 2;
 	g_opt.timeout = TDF_VALGRIND ? 10.0 : 3.0;
 	i = 0;
 	while (++i < ac)
@@ -47,6 +49,10 @@ static void	parse(int ac, char **av)
 			g_opt.vglogdir = av[++i];
 		else if (!strcmp(av[i], "--exe") && i + 1 < ac)
 			g_opt.exe = av[++i];
+		else if (!strcmp(av[i], "--aide") && i + 1 < ac)
+			g_opt.help = atoi(av[++i]);
+		else if (!strcmp(av[i], "--machine") && i + 1 < ac)
+			g_opt.machine = av[++i];
 		else
 			usage();
 	}

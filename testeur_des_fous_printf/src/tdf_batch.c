@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - moteur par lots (stress, bonus) et malloc qui échoue */
+/* Le testeur des fous · version printf - moteur par lots (stress, bonus) et malloc qui échoue */
 #include "tdf.h"
 #include <stdlib.h>
 #include <string.h>

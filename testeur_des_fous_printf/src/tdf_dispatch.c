@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - généré par tools/gen_dispatch.py : NE PAS ÉDITER */
+/* Le testeur des fous · version printf - généré par tools/gen_dispatch.py : NE PAS ÉDITER */
 #include "tdf.h"
 
 static int	d0(t_pf f, const char *s)

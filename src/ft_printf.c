@@ -6,11 +6,11 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/06 18:05:04 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/07 21:49:57 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/09 19:35:28 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
-#include "ft_printf.h"
+#include "../includes/ft_printf.h"
 
 static int	ft_verif_char(const char *s, int counter, va_list ap, int *flag)
 {
@@ -54,7 +54,6 @@ int	ft_printf(const char *s, ...)
 			counter++;
 		}
 		counter++;
-		//printf("\n[%c][%d] [%d]\n", s[counter], counter, size_conversion_final);
 	}
 	va_end(ap);
 	return (size_conversion_final);

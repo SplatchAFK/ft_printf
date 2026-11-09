@@ -4,7 +4,7 @@ typés (int, unsigned int, char *, void *) sans comportement indéfini de type."
 import itertools, os
 
 K = ['v[%d].i', 'v[%d].u', 'v[%d].s', 'v[%d].p']
-out = ['/* testeur_des_fous_printf (BETA) - généré par tools/gen_dispatch.py : NE PAS ÉDITER */',
+out = ['/* Le testeur des fous · version printf - généré par tools/gen_dispatch.py : NE PAS ÉDITER */',
        '#include "tdf.h"', '',
        'static int\td0(t_pf f, const char *s)\n{\n\treturn (f(s));\n}', '']
 for n in range(1, 5):

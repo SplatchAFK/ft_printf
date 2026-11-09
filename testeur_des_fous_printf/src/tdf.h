@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - en-tête commun */
+/* Le testeur des fous · version printf - en-tête commun */
 #ifndef TDF_H
 # define TDF_H
 
@@ -104,6 +104,8 @@ typedef struct s_opts
 	const char	*srclist;
 	const char	*vglogdir;
 	const char	*exe;
+	int			help;           /* 0 cas seul, 1 + ligne, 2 + conseil */
+	const char	*machine;       /* fichier de résultats lisible par le jeu */
 }	t_opts;
 
 extern t_opts	g_opt;

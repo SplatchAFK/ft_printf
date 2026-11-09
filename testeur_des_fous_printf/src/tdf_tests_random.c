@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - stress aléatoire (graine affichée) et bonus */
+/* Le testeur des fous · version printf - stress aléatoire (graine affichée) et bonus */
 #include "tdf_tests.h"
 #include <stdlib.h>
 #include <string.h>
@@ -273,6 +273,67 @@ static void	gen_values(char cv, int *k, t_val *vals, int *nv, int *local)
 		*nv = 1;
 }
 
+
+/* DLC : chaque flag testé seul, une catégorie par boss (pas d'attribution ambiguë) */
+static void	bonus_one(const char *key, const char *title, const char **flags, int fl,
+				const char **wd, const char **pr, const char *convs)
+{
+	char	fmt[64];
+	t_bc	*cases;
+	t_val	vals[16];
+	int		n;
+	int		k;
+	int		nv;
+	int		vi;
+	int		w;
+	int		p;
+	int		ci;
+	int		fi;
+	int		local;
+
+	cases = calloc(4000, sizeof(t_bc));
+	if (!cases)
+		return ;
+	tdf_category(key, title);
+	n = 0;
+	for (fi = 0; flags[fi]; fi++)
+	for (w = 0; wd[w]; w++)
+		for (p = 0; pr[p]; p++)
+			for (ci = 0; convs[ci]; ci++)
+			{
+				snprintf(fmt, sizeof(fmt), "[%%%s%s%s%c]", flags[fi], wd[w], pr[p], convs[ci]);
+				gen_values(convs[ci], &k, vals, &nv, &local);
+				for (vi = 0; vi < nv; vi++)
+					push(cases, &n, 4000, fmt, k, vals[vi],
+						is_ub(fl, (pr[p][0] ? 1 : 0) | (wd[w][0] ? 1 << 8 : 0), convs[ci],
+							convs[ci] == 's' && !vals[vi].s) ? SEV_UB : SEV_STRICT);
+			}
+	tdf_batch(cases, n, __FILE__, __LINE__, key);
+	free(cases);
+}
+
+static void	bonus_isolated(void)
+{
+	static const char	*w3[] = {"1", "5", "15", NULL};
+	static const char	*w0[] = {"", NULL};
+	static const char	*w2[] = {"", "6", NULL};
+	static const char	*p0[] = {"", NULL};
+	static const char	*pp[] = {".", ".0", ".1", ".5", ".15", NULL};
+
+	static const char	*fm[] = {"-", NULL};
+	static const char	*fz[] = {"0", NULL};
+	static const char	*fn[] = {"", NULL};
+	static const char	*fh[] = {"#", NULL};
+	static const char	*fs[] = {"+", " ", NULL};
+
+	bonus_one("bonus_minus", "DLC · flag - (le Gaucher)", fm, F_MINUS, w3, p0, "cspdiuxX");
+	bonus_one("bonus_zero", "DLC · flag 0 (le Remplisseur)", fz, F_ZERO, w3, p0, "diuxX");
+	bonus_one("bonus_width", "DLC · largeur (le Géant)", fn, F_WIDTH, w3, p0, "cspdiuxX");
+	bonus_one("bonus_prec", "DLC · précision . (le Précis)", fn, F_PREC, w0, pp, "sdiuxX");
+	bonus_one("bonus_hash", "DLC · flag # (l'Alterné)", fh, F_HASH, w2, p0, "xX");
+	bonus_one("bonus_sign", "DLC · flags + et espace (le Signataire)", fs, F_PLUS | F_SPACE, w2, p0, "di");
+}
+
 void	tdf_tests_bonus(void)
 {
 	static const char	*fl[] = {"-", "0", "#", "+", " "};
@@ -345,4 +406,6 @@ void	tdf_tests_bonus(void)
 	}
 	tdf_batch(cases, n, __FILE__, __LINE__, "bonus");
 	free(cases);
+	if (g_opt.bonus == 1)
+		bonus_isolated();
 }

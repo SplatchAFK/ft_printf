@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - traceur d'allocations
+/* Le testeur des fous · version printf - traceur d'allocations
  *
  * Seuls les appels à malloc/free/calloc/realloc faits PAR LA LIB testée sont
  * redirigés ici (édition de liens avec -Wl,--wrap=malloc,...).

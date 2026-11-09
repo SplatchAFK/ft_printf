@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - partie obligatoire */
+/* Le testeur des fous · version printf - partie obligatoire */
 #include "tdf_tests.h"
 #include <stdlib.h>
 #include <string.h>

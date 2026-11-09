@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# testeur_des_fous_printf (BETA) - testeur strict de ft_printf (projet 42)
+# Le testeur des fous · version printf - testeur strict de ft_printf (projet 42)
 # usage : ./run.sh [--valgrind] [--bonus] [--only %d] [--seed N] [options]
 set -u
 
 TDF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT="$(dirname "$TDF_DIR")"
-MODE="asan"
+MODE="asan+ubsan"
 ONLY=""
 SEED=""
 BONUS_OPT=""
@@ -13,21 +13,31 @@ STRESS=""
 TIMEOUT=""
 VERBOSE=""
 DO_NORM=1
+AIDE=2
+MACHINE=""
+DEBUG=0
+NOLORE=0
+# réglages communs aux testeurs des fous (écrits par le jeu)
+if [ -f "$HOME/.testeur_des_fous/reglages.txt" ]; then
+	while IFS='=' read -r k v; do
+		case "$k=$v" in AIDE=[012]) AIDE="$v" ;; esac
+	done < "$HOME/.testeur_des_fous/reglages.txt"
+fi
 
 R=$'\033[1;31m'; G=$'\033[1;32m'; Y=$'\033[1;33m'; B=$'\033[1;34m'; C=$'\033[0;36m'
 D=$'\033[2m'; N=$'\033[0m'
 
 usage() {
 	cat <<EOF
-testeur_des_fous_printf (BETA)
+Le testeur des fous · version printf
 
 usage : ./run.sh [options]
   --valgrind        valgrind (--leak-check=full --show-leak-kinds=all --track-origins=yes)
-  --ubsan           ajoute UBSan (dépassements signés, décalages...) en plus d'ASan
+  --asan-only       ASan seul, sans UBSan (défaut : ASan + UBSan)
   --no-sanitize     aucun sanitizer (traceur malloc + gardes maison seulement)
-                    (défaut : ASan seul)
-  --bonus           force les tests bonus (KO si un flag n'est pas géré)
-  --no-bonus        ignore le bonus (défaut : détection automatique)
+                    (défaut : ASan + UBSan)
+  --bonus           DLC : teste aussi les flags - 0 . # + espace et la largeur
+                    (défaut : non, le sujet v1.1 n'a pas de bonus)
   --only CAT        une ou plusieurs catégories séparées par des virgules :
                     c s p d i u x X % mix ret limites write malloc stress bonus
                     makefile nm norme      ex : --only %d   --only s,p,malloc
@@ -37,10 +47,17 @@ usage : ./run.sh [options]
   --dir CHEMIN      dossier du projet ft_printf (défaut : dossier parent)
   --no-norm         ne lance pas norminette
   -v                détaille tous les KO / avertissements
+  --aide N          0 : le cas fautif seulement, 1 : + la ligne de ton code,
+                    2 : + un conseil général (défaut : réglage du jeu, sinon 2)
+  --no-lord         les tests seuls, sans boss, sans animation, sans lore
+                    (synonyme : --lore-off)
+  --debug           debug avancé : tout le détail (fuites, mémoire, UB), puis un
+                    second passage sous valgrind s'il est installé
 EOF
 	exit "${1:-0}"
 }
 
+SAVED_ARGS=("$@")
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--valgrind) MODE="valgrind" ;;
@@ -57,13 +74,182 @@ while [ $# -gt 0 ]; do
 		--dir) shift; PROJECT="$(cd "${1:-.}" && pwd)" ;;
 		--no-norm) DO_NORM=0 ;;
 		-v) VERBOSE="-v" ;;
+		--aide) shift; AIDE="${1:-2}" ;;
+		--machine) shift; MACHINE="${1:-}" ;;
+		--no-lord|--lore-off) NOLORE=1 ;;
+		--debug) DEBUG=1 ;;
+		--exo) shift; EXO="${1:-}" ;;
+		--out) shift; EXO_OUT="${1:-}" ;;
+		--reco) shift; RECO="${1:-}" ;;
+		--version|-V) sed -n 's/^# *define TDF_VERSION "\(.*\)"/Le testeur des fous printf v\1/p' "$TDF_DIR/game/version.h"; exit 0 ;;
 		-h|--help) usage 0 ;;
 		*) echo "option inconnue : $1"; usage 2 ;;
 	esac
 	shift
 done
 
+case "$AIDE" in 0|1|2) ;; *) echo "--aide : 0, 1 ou 2"; exit 2 ;; esac
 [ -z "$SEED" ] && SEED=$(( (RANDOM << 15 | RANDOM) ))
+JEU="$TDF_DIR/.build_jeu"
+
+# ---------------------------------------------------------------- entraînement (--exo NN)
+if [ -n "${EXO:-}" ]; then
+	out="${EXO_OUT:-/dev/stdout}"
+	[ "$out" = /dev/stdout ] || : > "$out"
+	n=$((10#$EXO))
+	fn=$(sed -n "/^const t_pexo/,/^};/p" "$TDF_DIR/game/pf_data.c" | grep -o '{"ft_[a-z_]*"' | sed -n "${n}p" | tr -d '{"')
+	file="$TDF_DIR/entrainement/niveau_$EXO/$fn.c"
+	mkdir -p "$JEU"
+	if [ -z "$fn" ] || [ ! -f "$file" ]; then
+		printf 'X\tabsent\t0\nD\tfichier introuvable : %s/entrainement/niveau_%s/%s.c\n' "$(basename "$TDF_DIR")" "$EXO" "$fn" >> "$out"
+		exit 1
+	fi
+	if command -v norminette >/dev/null 2>&1; then
+		if ! norminette "$file" 2>&1 | grep -q ': OK!'; then
+			printf 'X\tnorme\t0\n' >> "$out"
+			norminette "$file" 2>&1 | grep -E 'Error' | head -4 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/^/D\t/' >> "$out"
+			exit 1
+		fi
+	fi
+	if ! cc -Wall -Wextra -Werror -g -fsanitize=address,undefined -DLEVEL="$n" -I "$TDF_DIR/game" \
+		"$TDF_DIR/game/exos/exos_pf.c" "$file" -o "$JEU/exo_$EXO" 2> "$JEU/exo_$EXO.err"; then
+		printf 'X\tbuild\t0\n' >> "$out"
+		grep -E 'error|warning' "$JEU/exo_$EXO.err" | head -4 | sed "s#$TDF_DIR/##" | sed 's/^/D\t/' >> "$out"
+		exit 1
+	fi
+	ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 timeout 10 "$JEU/exo_$EXO" >> "$out" 2> "$JEU/exo_$EXO.san"
+	rc=$?
+	if [ $rc -ne 0 ] && ! grep -q '^X' "$out"; then
+		printf 'X\tcrash\t0\n' >> "$out"
+		grep -m2 -E 'ERROR|runtime error|SUMMARY' "$JEU/exo_$EXO.san" | sed "s#$TDF_DIR/##" | sed 's/^/D\t/' >> "$out"
+	elif [ $rc -ne 0 ] && grep -q '^X	ok' "$out"; then
+		sed -i 's/^X\tok/X\tfuite/' "$out"
+		grep -m2 -E 'ERROR|SUMMARY' "$JEU/exo_$EXO.san" | sed "s#$TDF_DIR/##" | sed 's/^/D\t/' >> "$out"
+	fi
+	grep -q '^X	ok' "$out"
+	exit $?
+fi
+
+# ---------------------------------------------------------------- le jeu
+build_jeu() {
+	local empreinte
+	mkdir -p "$JEU"
+	empreinte=$(cat "$TDF_DIR"/game/*.c "$TDF_DIR"/game/*.h 2>/dev/null | cksum | cut -d' ' -f1)
+	if [ -x "$JEU/fous" ] && [ "$(cat "$JEU/empreinte" 2>/dev/null)" = "$empreinte" ]; then
+		return 0
+	fi
+	cc -O2 -w -DTDF_PRINTF -I "$TDF_DIR/game" "$TDF_DIR"/game/*.c -lm -o "$JEU/fous" 2> "$JEU/jeu.err" || return 1
+	printf '%s\n' "$empreinte" > "$JEU/empreinte"
+}
+# cinématiques prévues pour 120 x 36 : si le terminal est plus petit, le testeur
+# s'ouvre tout seul dans une nouvelle fenêtre de 140 x 42 (WSL, Linux, macOS)
+grand_terminal() {
+	local c l t term lanceur a
+	c=$(tput cols 2>/dev/null || echo 80)
+	l=$(tput lines 2>/dev/null || echo 24)
+	{ [ "$c" -ge 120 ] && [ "$l" -ge 36 ]; } && return 0
+	[ -z "${TDF_FENETRE:-}" ] || return 0
+	printf '\e[8;42;140t'
+	sleep 0.3
+	c=$(tput cols 2>/dev/null || echo 80)
+	l=$(tput lines 2>/dev/null || echo 24)
+	{ [ "$c" -ge 120 ] && [ "$l" -ge 36 ]; } && return 0
+	lanceur="${TMPDIR:-/tmp}/testeur_des_fous_fenetre_$$.sh"
+	{
+		printf 'rm -f -- "$0"\n'
+		printf 'cd %q || exit 1\n' "$PWD"
+		printf 'TDF_FENETRE=1 bash %q' "$TDF_DIR/run.sh"
+		for a in ${SAVED_ARGS[@]+"${SAVED_ARGS[@]}"}; do printf ' %q' "$a"; done
+		printf '\nprintf "\\n  (Entrée pour fermer la fenêtre) "; read -r _\n'
+	} > "$lanceur" || return 0
+	if grep -qi microsoft /proc/version 2>/dev/null && command -v cmd.exe >/dev/null 2>&1; then
+		( cd /mnt/c 2>/dev/null; cmd.exe /c start "Le testeur des fous" cmd /c \
+			"mode con: cols=140 lines=42 & wsl.exe ${WSL_DISTRO_NAME:+-d $WSL_DISTRO_NAME} -- bash $lanceur" ) >/dev/null 2>&1 \
+			|| return 0
+	elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+		term=""
+		for t in gnome-terminal konsole xfce4-terminal xterm; do
+			command -v "$t" >/dev/null 2>&1 && { term="$t"; break; }
+		done
+		case "$term" in
+			gnome-terminal) gnome-terminal --geometry=140x42 -- bash "$lanceur" >/dev/null 2>&1 || return 0 ;;
+			konsole) konsole -p TerminalColumns=140 -p TerminalRows=42 -e bash "$lanceur" >/dev/null 2>&1 & ;;
+			xfce4-terminal) xfce4-terminal --geometry=140x42 -x bash "$lanceur" >/dev/null 2>&1 & ;;
+			xterm) xterm -geometry 140x42 -e bash "$lanceur" >/dev/null 2>&1 & ;;
+			*) rm -f -- "$lanceur"; return 0 ;;
+		esac
+	elif [ "$(uname -s)" = Darwin ] && command -v osascript >/dev/null 2>&1; then
+		osascript -e "tell application \"Terminal\" to do script \"bash '$lanceur'\"" \
+			-e 'tell application "Terminal" to set bounds of front window to {40, 40, 1180, 900}' >/dev/null 2>&1 || return 0
+	else
+		rm -f -- "$lanceur"
+		return 0
+	fi
+	printf '\n  Ton terminal fait %s x %s : le testeur s'"'"'ouvre dans une nouvelle fenêtre de 140 x 42.\n' "$c" "$l"
+	printf '  (pour rester ici : TDF_FENETRE=1 bash %s/run.sh)\n\n' "$(basename "$TDF_DIR")"
+	exit 0
+}
+if [ -z "${TDF_ENGINE:-}" ] && [ "$NOLORE" = 0 ] && [ "$DEBUG" = 0 ] && [ -z "$VERBOSE" ] && [ -z "$ONLY" ] \
+	&& [ -z "$MACHINE" ] && [ -t 0 ] && [ -t 1 ]; then
+	grand_terminal
+	printf '\n  \033[38;5;213mLe testeur des fous\033[0m · version printf · préparation du jeu...'
+	if build_jeu; then
+		printf '\r\033[K'
+		first=1
+		dlc=0
+		while :; do
+			RES="$JEU/resultats.tsv"
+			: > "$RES"
+			EARGS=(--seed "$SEED" --dir "$PROJECT" --aide "$AIDE" --machine "$RES")
+			case "$MODE" in valgrind) EARGS+=(--valgrind) ;; asan) EARGS+=(--asan-only) ;; none) EARGS+=(--no-sanitize) ;; esac
+			[ "$DO_NORM" = 0 ] && EARGS+=(--no-norm)
+			[ -n "$STRESS" ] && EARGS+=(--stress "$STRESS")
+			[ -n "$TIMEOUT" ] && EARGS+=(--timeout "$TIMEOUT")
+			{ [ "$dlc" = 1 ] || [ "$BONUS_OPT" = "--bonus" ]; } && EARGS+=(--bonus)
+			( TDF_ENGINE=1 bash "$TDF_DIR/run.sh" "${EARGS[@]}" > "$JEU/moteur.log" 2>&1 < /dev/null; printf 'E\n' >> "$RES" ) &
+			EPID=$!
+			GARGS=(--results "$RES" --pid "$EPID" --dir "$TDF_DIR")
+			[ "$first" = 0 ] && GARGS+=(--relance)
+			[ "$dlc" = 1 ] && GARGS+=(--dlc)
+			[ "$first" = 1 ] && [ -n "${RECO:-}" ] && GARGS+=(--reco "$RECO")
+			"$JEU/fous" "${GARGS[@]}"
+			code=$?
+			kill "$EPID" 2>/dev/null
+			wait "$EPID" 2>/dev/null
+			first=0
+			dlc=0
+			[ "$code" = 43 ] && { dlc=1; continue; }
+			[ "$code" = 42 ] || break
+		done
+		exit $code
+	fi
+	printf '\r\033[K  le jeu ne compile pas, passage en mode texte :\n'
+	sed 's/^/    /' "$JEU/jeu.err" | head -5
+fi
+# --no-lord : les tests seuls, puis la progression est enregistrée
+if [ "$NOLORE" = 1 ] && [ -z "${TDF_ENGINE:-}" ] && [ -z "$MACHINE" ]; then
+	mkdir -p "$JEU"
+	MACHINE="$JEU/resultats.tsv"
+	NOLORE_RECORD=1
+fi
+# --debug : passage complet et détaillé, puis valgrind (moins d'appels aléatoires, valgrind est lent)
+if [ "$DEBUG" = 1 ]; then
+	PASS=(--seed "$SEED" --aide 2 -v --dir "$PROJECT")
+	[ -n "$ONLY" ] && PASS+=(--only "$ONLY")
+	[ "$BONUS_OPT" = "--bonus" ] && PASS+=(--bonus)
+	[ "$DO_NORM" = 0 ] && PASS+=(--no-norm)
+	printf "\n%s  DEBUG AVANCÉ · passage 1/2 : ASan + UBSan, tout le détail%s\n" "$B" "$N"
+	bash "$TDF_DIR/run.sh" "${PASS[@]}"
+	rc=$?
+	if command -v valgrind >/dev/null 2>&1; then
+		printf "\n%s  DEBUG AVANCÉ · passage 2/2 : valgrind (fuites de toutes sortes, lectures non initialisées)%s\n" "$B" "$N"
+		bash "$TDF_DIR/run.sh" "${PASS[@]}" --valgrind --stress 300 --no-norm || rc=1
+	else
+		printf "\n  %svalgrind n'est pas installé : passage 2/2 sauté%s\n" "$Y" "$N"
+	fi
+	exit $rc
+fi
+[ -n "$MACHINE" ] && : > "$MACHINE"
 OS="$(uname -s)"
 BUILD="$TDF_DIR/.build"
 COPY="$BUILD/project"
@@ -83,13 +269,53 @@ line() {   # line OK|KO|~~ titre [détail]
 	[ "$1" = "~~" ] && col="$Y" && STATIC_WARN=$((STATIC_WARN + 1))
 	[ "$1" = ".." ] && col="$D"
 	printf "  %s%-3s%s %s %s\n" "$col" "$1" "$N" "$2" "${3:-}"
+	[ -n "$MACHINE" ] && printf 'S\t%s\t%s\t%s\n' "$1" "$2" "${3:-}" >> "$MACHINE"
+	return 0
 }
-detail() { printf "      %s\n" "$@"; }
+detail() {
+	printf "      %s\n" "$@"
+	[ -n "$MACHINE" ] && printf 'D\t%s\n' "$*" | sed 's/\x1b\[[0-9;]*m//g' >> "$MACHINE"
+	return 0
+}
+
+# ---------------------------------------------------------------- cache
+# Ce qui ne dépend que du Makefile, des en-têtes ou de la libft/ est gardé entre
+# deux lancements : corriger un .c puis relancer ne refait que l'utile.
+# TDF_CACHE=0 bash run.sh pour tout refaire.
+CACHE="$TDF_DIR/.build_jeu/cache"
+mkdir -p "$CACHE" 2>/dev/null
+fingerprint() {   # fingerprint fichiers... -> empreinte (version, options, contenus)
+	{ printf '%s|%s|%s|%s\n' "${TDF_V:-}" "$OS" "$ONLY" "$BONUS_OPT"; cat "$@" 2>/dev/null; } | cksum | cut -d' ' -f1
+}
+cache_run() {   # cache_run nom empreinte fonction : rejoue le résultat gardé, sinon lance et garde
+	local tdf_cf="$CACHE/$1.$2" tdf_cm="$MACHINE"   # noms rares : les fonctions appelées voient ces variables
+	if [ "${TDF_CACHE:-1}" != 1 ] || [ ! -d "$CACHE" ] || [ -z "$2" ]; then
+		"$3"
+		return 0
+	fi
+	if [ -f "$tdf_cf.out" ] && [ -f "$tdf_cf.tsv" ]; then
+		cat "$tdf_cf.out"
+		[ -n "$tdf_cm" ] && cat "$tdf_cf.tsv" >> "$tdf_cm"
+		STATIC_KO=$((STATIC_KO + $(awk -F'\t' '$1=="S" && $2=="KO"' "$tdf_cf.tsv" | wc -l)))
+		STATIC_WARN=$((STATIC_WARN + $(awk -F'\t' '$1=="S" && $2=="~~"' "$tdf_cf.tsv" | wc -l)))
+		return 0
+	fi
+	MACHINE="$CACHE/.rec.tsv"
+	: > "$MACHINE"
+	"$3" > "$CACHE/.rec.out"
+	MACHINE="$tdf_cm"
+	cat "$CACHE/.rec.out"
+	[ -n "$tdf_cm" ] && cat "$CACHE/.rec.tsv" >> "$tdf_cm"
+	rm -f "$CACHE/$1".*
+	mv "$CACHE/.rec.out" "$tdf_cf.out" && mv "$CACHE/.rec.tsv" "$tdf_cf.tsv"
+	return 0
+}
 
 printf "\n%s ═══════════════════════════════════════════════════════════════%s\n" "$B" "$N"
-printf "%s   testeur_des_fous_printf  %s(BETA)%s   mode : %s%s%s\n" "$B" "$Y" "$B" "$C" "$MODE" "$N"
+TDF_V=$(sed -n 's/^# *define TDF_VERSION "\(.*\)"/\1/p' "$TDF_DIR/game/version.h" 2>/dev/null)
+printf "%s   Le testeur des fous · version printf v%s   %smode : %s%s%s\n" "$B" "${TDF_V:-?}" "$N" "$C" "$MODE" "$N"
 printf "%s ═══════════════════════════════════════════════════════════════%s\n" "$B" "$N"
-printf "  projet : %s\n  OS : %s   graine du stress : %s\n" "$PROJECT" "$OS" "$SEED"
+printf "  projet : %s\n  OS : %s   graine du stress : %s   aide : %s/2\n" "$PROJECT" "$OS" "$SEED" "$AIDE"
 
 if [ ! -f "$PROJECT/Makefile" ]; then
 	printf "\n  %sKO%s pas de Makefile dans %s\n" "$R" "$N" "$PROJECT"
@@ -125,7 +351,7 @@ if [ ! -f "$COPY/libftprintf.a" ]; then
 	exit 1
 fi
 
-if want makefile; then
+mk_audit() {   # règles, NAME, flags, relink (avec un « sleep 1 »), clean/fclean/re, en-tête
 	MK_PB=()
 	MK_WARN=()
 	for r in all clean fclean re libftprintf.a; do
@@ -174,6 +400,14 @@ if want makefile; then
 		for m in "${MK_PB[@]}"; do detail "${R}✗${N} $m"; done
 		for m in "${MK_WARN[@]}"; do detail "${Y}⚠${N} $m"; done
 	fi
+	if [ -d "$COPY/libft" ]; then
+		if echo "$CMDS" | grep -Eq '(make|MAKE)[^;&|]*-C[[:space:]]*(\./)?libft|cd[[:space:]]+(\./)?libft[^;&|]*(&&|;)[[:space:]]*\$?\(?(make|MAKE)'; then
+			line OK "Makefile : la libft est compilée par son propre Makefile (make -C libft)"
+		else
+			line KO "Makefile : la libft doit être compilée par son propre Makefile"
+			detail "sujet, instructions communes : « Your activity's Makefile must compile the library by using its Makefile »"
+		fi
+	fi
 	HDR=$(student_find -name 'ft_printf.h' | head -1)
 	if [ -z "$HDR" ]; then
 		line KO "ft_printf.h introuvable"
@@ -182,6 +416,72 @@ if want makefile; then
 	else
 		line OK "ft_printf.h et prototype"
 	fi
+}
+if want makefile; then
+	MK_KEY=$(fingerprint "$COPY/Makefile" "$COPY/libft/Makefile" $(student_find -name '*.h') \
+		<(student_find -type f | sed "s#^$COPY/##"))
+	cache_run makefile "$MK_KEY" mk_audit
+fi
+
+# ---------------------------------------------------------------- README (sujet, chapitre 5)
+if want readme || want makefile; then
+	RD="$COPY/README.md"
+	if [ ! -f "$RD" ]; then
+		line KO "README.md absent à la racine (sujet, chapitre 5)"
+	else
+		RD_PB=()
+		first=$(grep -m1 -v '^[[:space:]]*$' "$RD")
+		case "$first" in
+			[*_]*"This activity has been created as part of the 42 curriculum by "*[*_]) ;;
+			*) RD_PB+=("1re ligne : en italique, « This activity has been created as part of the 42 curriculum by <login> »") ;;
+		esac
+		for sec in Description Instructions Resources; do
+			grep -Eqi "^#+[[:space:]]*$sec" "$RD" || RD_PB+=("section « $sec » absente")
+		done
+		RES=$(sed -n '/^#\{1,\}[[:space:]]*[Rr]esources/,$p' "$RD")
+		{ echo "$RES" | grep -Eqiw 'ai|ia|llm|chatgpt|gpt|claude|copilot|mistral|gemini' \
+			|| echo "$RES" | grep -qi 'intelligence'; } \
+			|| RD_PB+=("Resources : décris comment l'IA a été utilisée (ou qu'elle ne l'a pas été)")
+		if [ ${#RD_PB[@]} -eq 0 ]; then
+			line OK "README.md (1re ligne, Description, Instructions, Resources)"
+			line "~~" "README.md : explication de l'algorithme et de la structure de données" \
+				"(exigée par le sujet, à vérifier par toi : le testeur ne juge pas le fond)"
+		else
+			line KO "README.md"
+			for m in "${RD_PB[@]}"; do detail "${R}✗${N} $m"; done
+		fi
+	fi
+fi
+
+# ---------------------------------------------------------------- libft/ : contrôle rapide
+lr_check() {
+	LR="$BUILD/libft_rapide"
+	mkdir -p "$LR"
+	cp -r "$COPY/libft/." "$LR/" 2>/dev/null
+	( cd "$LR" && make fclean >/dev/null 2>&1; make >/dev/null 2>&1 )
+	LRA=$(find "$LR" -maxdepth 1 -name '*.a' | head -1)
+	if [ -z "$LRA" ]; then
+		line KO "libft/ : contrôle rapide impossible, la libft ne compile pas avec son Makefile"
+	elif ! { WA=(-Wl,--whole-archive "$LRA" -Wl,--no-whole-archive); [ "$OS" = Darwin ] && WA=("-Wl,-force_load,$LRA")
+		cc -g -w -fsanitize=address,undefined "$TDF_DIR/game/exos/libft_rapide.c" "${WA[@]}" -o "$LR/rapide" 2>"$LR/build.log"; }; then
+		line "~~" "libft/ : contrôle rapide impossible (édition de liens)" "$(head -1 "$LR/build.log" | cut -c1-90)"
+	else
+		ASAN_OPTIONS=detect_leaks=0 timeout 60 "$LR/rapide" > "$LR/res.txt" 2>/dev/null
+		LOK=$(awk -F'\t' '$1=="T"{print $2}' "$LR/res.txt")
+		LTOT=$(awk -F'\t' '$1=="T"{print $3}' "$LR/res.txt")
+		if [ -n "$LOK" ] && [ "$LOK" = "$LTOT" ]; then
+			line OK "libft/ : contrôle rapide de ta libft ($LOK/$LTOT fonctions)"
+		else
+			line KO "libft/ : contrôle rapide de ta libft (${LOK:-0}/${LTOT:-43} fonctions)"
+			awk -F'\t' '$1=="F" && $3!="OK"{print $2 " : " $3 " " $4}' "$LR/res.txt" | head -8 | while IFS= read -r l; do detail "$l"; done
+		fi
+	fi
+}
+if { want makefile || want libft; } && [ -f "$COPY/libft/Makefile" ]; then
+	LR_KEY=$(fingerprint "$TDF_DIR/game/exos/libft_rapide.c" \
+		$(find "$COPY/libft" -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile' \) | sort) \
+		<(cd "$COPY/libft" && find . -type f \( -name '*.c' -o -name '*.h' \) | sort))
+	cache_run libft "$LR_KEY" lr_check
 fi
 
 # ---------------------------------------------------------------- nm
@@ -241,7 +541,7 @@ objs_to_srcs() {   # $1 = archive -> chemins des .c correspondants (stdout) ; co
 }
 SRCS_M=$(objs_to_srcs "$COPY/libftprintf.a")
 HAS_BONUS=0
-if (cd "$COPY" && make -n bonus >/dev/null 2>&1); then
+if [ "$BONUS_OPT" = "--bonus" ] && (cd "$COPY" && make -n bonus >/dev/null 2>&1); then
 	HAS_BONUS=1
 	( cd "$COPY" && make fclean >/dev/null 2>&1 && make bonus >"$BUILD/make_bonus.log" 2>&1 )
 	if [ -f "$COPY/libftprintf.a" ]; then
@@ -257,16 +557,24 @@ cp "$COPY/libftprintf.a" "$BUILD/student.a"
 # ---------------------------------------------------------------- norminette
 if want norme && [ $DO_NORM -eq 1 ]; then
 	if command -v norminette >/dev/null 2>&1; then
-		NFILES=$( { echo "$SRCS_M"; [ $HAS_BONUS -eq 1 ] && echo "$SRCS_B"; student_find -name '*.h'; } | grep -v '^MISSING:' | sort -u)
-		NOUT=$(cd "$COPY" && norminette $NFILES 2>&1)
-		NERR=$(echo "$NOUT" | grep -c ': Error!')
-		NTOT=$(echo "$NFILES" | grep -c .)
-		if [ "$NERR" -eq 0 ]; then
-			line OK "norminette ($NTOT fichiers)"
-		else
-			line KO "norminette : $NERR fichier(s) sur $NTOT en erreur"
-			echo "$NOUT" | grep -E 'Error!|Error:' | head -n 12 | sed "s#$COPY/##" | sed 's/^/      /'
+		NORM_LATEST="3.3.60"
+		NV=$(norminette --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+		if [ -n "$NV" ] && [ "$(printf '%s\n%s\n' "$NV" "$NORM_LATEST" | sort -V | head -1)" != "$NORM_LATEST" ]; then
+			line "~~" "norminette $NV : la dernière connue est $NORM_LATEST" "(python3 -m pip install --user -U norminette)"
 		fi
+		NFILES=$( { echo "$SRCS_M"; [ $HAS_BONUS -eq 1 ] && echo "$SRCS_B"; student_find -name '*.h'; } | grep -v '^MISSING:' | sort -u)
+		norm_run() {
+			NOUT=$(cd "$COPY" && norminette $NFILES 2>&1)
+			NERR=$(echo "$NOUT" | grep -c ': Error!')
+			NTOT=$(echo "$NFILES" | grep -c .)
+			if [ "$NERR" -eq 0 ]; then
+				line OK "norminette ($NTOT fichiers)"
+			else
+				line KO "norminette : $NERR fichier(s) sur $NTOT en erreur"
+				echo "$NOUT" | grep -E 'Error!|Error:' | head -n "$( [ -n "$VERBOSE" ] && echo 100000 || echo 12 )" | sed "s#$COPY/##" | sed 's/^/      /'
+			fi
+		}
+		cache_run norme "$(fingerprint <(echo "$NV $VERBOSE"; echo "$NFILES" | sed "s#^$COPY/##") $NFILES)" norm_run
 	else
 		line ".." "norminette non installée : vérification de la norme ignorée"
 	fi
@@ -309,13 +617,17 @@ build_lib() {   # build_lib "<srcs>" objdir archive studentlib -> 0 instrumenté
 		cp "$fallback" "$out"; return 1
 	fi
 	: > "$od.list"
+	rm -f "$od"/*.fail
 	for s in $srcs; do
 		i=$((i + 1))
-		if ! $CC_T $CFLAGS_COMMON $SAN -w $INCS -c "$s" -o "$od/$i.o" 2>>"$BUILD/build.log"; then
-			cp "$fallback" "$out"; return 1
-		fi
+		{ $CC_T $CFLAGS_COMMON $SAN -w $INCS -c "$s" -o "$od/$i.o" 2>>"$BUILD/build.log" || : > "$od/$i.fail"; } &
 		echo "$s" >> "$od.list"
+		[ $((i % 8)) -eq 0 ] && wait
 	done
+	wait
+	if ls "$od"/*.fail >/dev/null 2>&1; then
+		cp "$fallback" "$out"; return 1
+	fi
 	ar rcs "$out" "$od"/*.o
 	return 0
 }
@@ -325,7 +637,29 @@ if ! build_lib "$SRCS_M" "$BUILD/obj" "$BUILD/lib_m.a" "$BUILD/student.a"; then
 fi
 echo "$SRCS_M" | grep -v '^MISSING:' > "$BUILD/srcs.txt"
 RUNNER_SRC="$TDF_DIR/src"
+RUNNER_OBJ=""
+runner_objs() {   # compile le testeur une fois par version et par mode (objets gardés)
+	local key f o ok=1
+	[ "${TDF_CACHE:-1}" = 1 ] && [ -d "$CACHE" ] || return 1
+	key=$(fingerprint "$RUNNER_SRC"/*.c "$RUNNER_SRC"/*.h <(echo "$CC_T $CFLAGS_COMMON $SAN $TRACK $MODE"))
+	RUNNER_OBJ="$CACHE/runner.$key"
+	[ -f "$RUNNER_OBJ/ok" ] && return 0
+	rm -rf "$CACHE"/runner.*
+	mkdir -p "$RUNNER_OBJ"
+	for f in "$RUNNER_SRC"/*.c; do
+		o="$RUNNER_OBJ/$(basename "$f" .c).o"
+		{ LC_ALL=C $CC_T $CFLAGS_COMMON $SAN $TRACK -DTDF_MODE="\"$MODE\"" -fno-builtin -Wall -Wextra \
+			-I"$RUNNER_SRC" -c "$f" -o "$o" 2>>"$BUILD/runner_build.log" || : > "$o.fail"; } &
+	done
+	wait
+	ls "$RUNNER_OBJ"/*.fail >/dev/null 2>&1 && { rm -rf "$RUNNER_OBJ"; RUNNER_OBJ=""; return 1; }
+	: > "$RUNNER_OBJ/ok"
+}
 build_runner() {   # build_runner lib exe
+	if [ -n "$RUNNER_OBJ" ] || runner_objs; then
+		LC_ALL=C $CC_T $CFLAGS_COMMON $SAN "$RUNNER_OBJ"/*.o "$1" $LINK_WRAP -ldl -o "$2" 2>>"$BUILD/runner_build.log" \
+			&& return 0
+	fi
 	LC_ALL=C $CC_T $CFLAGS_COMMON $SAN $TRACK -DTDF_MODE="\"$MODE\"" -fno-builtin -Wall -Wextra \
 		-I"$RUNNER_SRC" "$RUNNER_SRC"/*.c "$1" $LINK_WRAP -ldl -o "$2" 2>"$BUILD/runner_build.log"
 }
@@ -345,7 +679,8 @@ sort -u -o "$BUILD/srcs.txt" "$BUILD/srcs.txt"
 export ASAN_OPTIONS="check_printf=0:detect_leaks=1:halt_on_error=1:symbolize=1:allocator_may_return_null=1:detect_odr_violation=0:print_summary=1"
 export UBSAN_OPTIONS="print_stacktrace=1:halt_on_error=1"
 export LSAN_OPTIONS="print_suppressions=0"
-ARGS=(--seed "$SEED" --project "$COPY" --srclist "$BUILD/srcs.txt" --vglogdir "$BUILD/vg")
+ARGS=(--seed "$SEED" --project "$COPY" --srclist "$BUILD/srcs.txt" --vglogdir "$BUILD/vg" --aide "$AIDE")
+[ -n "$MACHINE" ] && ARGS+=(--machine "$MACHINE")
 [ -n "$STRESS" ] && ARGS+=(--stress "$STRESS")
 [ -n "$TIMEOUT" ] && ARGS+=(--timeout "$TIMEOUT")
 [ -n "$VERBOSE" ] && ARGS+=("$VERBOSE")
@@ -372,8 +707,10 @@ if [ -z "$ONLY" ] || [ -n "$DYN_ONLY" ]; then
 	[ -n "$DYN_ONLY" ] && M_ARGS+=(--only "$DYN_ONLY")
 	if [ $HAS_BONUS -eq 1 ]; then
 		M_ARGS+=(--no-bonus)
-	elif [ -n "$BONUS_OPT" ]; then
-		M_ARGS+=("$BONUS_OPT")
+	elif [ "$BONUS_OPT" = "--bonus" ]; then
+		M_ARGS+=(--bonus)
+	else
+		M_ARGS+=(--no-bonus)
 	fi
 	run_runner "$BUILD/tdf_runner" "${M_ARGS[@]}" || RC=1
 	if [ $HAS_BONUS -eq 1 ] && [ "$BONUS_OPT" != "--no-bonus" ] && { [ -z "$DYN_ONLY" ] || echo ",$DYN_ONLY," | grep -q ',bonus,'; }; then
@@ -396,6 +733,15 @@ printf "\n"
 if want stress; then
 	printf "  %sPour rejouer le stress : ./run.sh --only stress --seed %s%s\n" "$D" "$SEED" "$N"
 fi
-printf "  %stestable aussi avec : --valgrind | --ubsan | --no-sanitize%s\n\n" "$D" "$N"
+printf "  %stestable aussi avec : --valgrind | --asan-only | --no-sanitize%s\n\n" "$D" "$N"
 [ $STATIC_KO -gt 0 ] && RC=1
+# --no-lord : la progression est enregistrée sans rien afficher d'autre
+if [ "${NOLORE_RECORD:-0}" = 1 ]; then
+	printf 'E\n' >> "$MACHINE"
+	if build_jeu; then
+		"$JEU/fous" --results "$MACHINE" --record --dir "$TDF_DIR" || true
+	else
+		printf '  (progression non enregistrée : le jeu ne compile pas)\n'
+	fi
+fi
 exit $RC

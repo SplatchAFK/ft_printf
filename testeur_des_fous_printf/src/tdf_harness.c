@@ -1,4 +1,4 @@
-/* testeur_des_fous_printf (BETA) - moteur : fork, capture, comparaison, rapport */
+/* Le testeur des fous · version printf - moteur : fork, capture, comparaison, rapport */
 #include "tdf.h"
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +150,8 @@ int	tdf_selected(const char *key)
 
 	if (!g_opt.only || !*g_opt.only)
 		return (1);
+	if (!strncmp(key, "bonus_", 6) && tdf_selected("bonus"))
+		return (1);
 	o = g_opt.only;
 	while (*o)
 	{
@@ -229,6 +231,96 @@ static int		g_ncause;
 static int		g_cause_over;
 static t_gcause	g_gc[MAX_GCAUSE];
 static int		g_ngc;
+
+/* ------------------------------------------------------------------ */
+/* sortie « machine » : une ligne par événement, champs séparés par \t  */
+/* (lue par le jeu ; les couleurs ANSI, \t et \n sont neutralisés)      */
+/* ------------------------------------------------------------------ */
+static int	g_mfd = -1;
+
+static void	m_field(t_buf *b, const char *s)
+{
+	size_t	i;
+
+	i = 0;
+	while (s && s[i])
+	{
+		if (s[i] == '\033' && s[i + 1] == '[')
+		{
+			i += 2;
+			while (s[i] && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')))
+				i++;
+			if (s[i])
+				i++;
+			continue ;
+		}
+		if (s[i] == '\n')
+			buf_add(b, "\\n", 2);
+		else if (s[i] == '\t')
+			buf_add(b, " ", 1);
+		else if (s[i] == '\\')
+			buf_add(b, "\\\\", 2);
+		else
+			buf_add(b, s + i, 1);
+		i++;
+	}
+}
+
+static void	m_line(int n, const char **f)
+{
+	t_buf	b;
+	int		i;
+
+	if (g_mfd < 0)
+		return ;
+	memset(&b, 0, sizeof(b));
+	i = -1;
+	while (++i < n)
+	{
+		if (i)
+			buf_add(&b, "\t", 1);
+		m_field(&b, f[i]);
+	}
+	buf_add(&b, "\n", 1);
+	(void)!write(g_mfd, b.p, b.len);
+	free(b.p);
+}
+
+static void	m_open(void)
+{
+	if (g_opt.machine && g_mfd < 0)
+		g_mfd = open(g_opt.machine, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+}
+
+/* niveau d'aide 0 : on retire « → ligne du bug » des détails */
+static void	help_filter(t_buf *dst, const char *p, size_t len)
+{
+	const char	*e;
+	size_t		l;
+
+	while (len)
+	{
+		e = memchr(p, '\n', len);
+		l = e ? (size_t)(e - p) + 1 : len;
+		if (g_opt.help >= 1 || (!memmem(p, l, "ligne du bug", 12)
+				&& !memmem(p, l, "alloué ici", strlen("alloué ici"))))
+			buf_add(dst, p, l);
+		p += l;
+		len -= l;
+	}
+}
+
+/* titre de cause sans « — fichier:ligne » si l'aide est à 0 */
+static void	title_print(const char *t, char *dst, size_t n)
+{
+	const char	*w;
+
+	w = strstr(t, " — ");
+	if (g_opt.help < 1 && w)
+		snprintf(dst, n, "%.*s", (int)(w - t), t);
+	else
+		snprintf(dst, n, "%s", t);
+}
 
 #define H_LEAK "un malloc n'est jamais free : libère le buffer APRÈS l'avoir écrit, sur tous les chemins (retours anticipés et erreurs compris)"
 #define H_MEM "accès mémoire invalide : teste les retours de malloc / les pointeurs NULL avant de les utiliser (regarde la ligne indiquée)"
@@ -581,15 +673,17 @@ static int	gcause_seen(t_cause *c)
 
 static void	cause_render(t_cause *c)
 {
-	int	i;
+	char	t[260];
+	int		i;
 
+	title_print(c->title, t, sizeof(t));
 	if (gcause_seen(c))
 	{
 		dprintf(g_out, "      " C_RED "▸ %s" C_RST C_DIM "   (%d cas)  [même cause que plus haut]"
-			C_RST "\n", c->title, c->count);
+			C_RST "\n", t, c->count);
 		return ;
 	}
-	dprintf(g_out, "      " C_RED "▸ %s" C_RST C_DIM "   (%d cas)" C_RST "\n", c->title, c->count);
+	dprintf(g_out, "      " C_RED "▸ %s" C_RST C_DIM "   (%d cas)" C_RST "\n", t, c->count);
 	i = -1;
 	while (++i < c->nex)
 	{
@@ -605,8 +699,8 @@ static void	cause_render(t_cause *c)
 			dprintf(g_out, "  %s", c->more[i]);
 		dprintf(g_out, "%s" C_RST "\n", c->count > 2 + c->nmore ? "  …" : "");
 	}
-	if (c->hint)
-		dprintf(g_out, "        " C_YEL "→ conseil :" C_RST " %s\n", c->hint);
+	if (c->hint && g_opt.help >= 2)
+		dprintf(g_out, "        " C_RST "→ conseil : %s\n", c->hint);
 }
 
 static void	causes_flush(void)
@@ -634,6 +728,25 @@ static void	causes_flush(void)
 	i = -1;
 	while (++i < g_ncause)
 	{
+		{
+			const char	*f[6];
+			char		cnt[16];
+			char		t[260];
+			const char	*w;
+
+			w = strchr(g_causes[idx[i]].key, '|');
+			snprintf(cnt, sizeof(cnt), "%d", g_causes[idx[i]].count);
+			snprintf(t, sizeof(t), "%s", g_causes[idx[i]].title);
+			if (strstr(t, " — "))
+				*strstr(t, " — ") = '\0';
+			f[0] = "K";
+			f[1] = g_cat.key;
+			f[2] = t;
+			f[3] = w ? w + 1 : "";
+			f[4] = cnt;
+			f[5] = g_causes[idx[i]].hint ? g_causes[idx[i]].hint : "";
+			m_line(6, f);
+		}
 		if (i < MAX_SHOW)
 			cause_render(&g_causes[idx[i]]);
 		gcause_merge(&g_causes[idx[i]]);
@@ -688,10 +801,13 @@ static void	causes_summary(void)
 	while (rank < g_ngc && rank < 6)
 	{
 		t_gcause *g = &g_gc[idx[rank]];
+		char	tt[260];
+
+		title_print(g->title, tt, sizeof(tt));
 		dprintf(g_out, "   %d. " C_RED "%s" C_RST C_DIM "  (%d cas)" C_RST "\n",
-			rank + 1, g->title, g->count);
-		if (g->hint)
-			dprintf(g_out, "      " C_YEL "→" C_RST " %s\n", g->hint);
+			rank + 1, tt, g->count);
+		if (g->hint && g_opt.help >= 2)
+			dprintf(g_out, "      " C_RST "→ %s\n", g->hint);
 		rank++;
 	}
 	if (g_ngc > 6)
@@ -726,6 +842,23 @@ void	tdf_category_end(void)
 	if (g_cat.shown_warn < g_cat.warn)
 		dprintf(g_out, C_DIM "      … %d autre(s) avertissement(s) non détaillé(s) (-v pour tout voir)\n" C_RST,
 			g_cat.warn - g_cat.shown_warn);
+	{
+		const char	*f[6];
+		char		a[16];
+		char		b2[16];
+		char		c2[16];
+
+		snprintf(a, sizeof(a), "%d", g_cat.ok);
+		snprintf(b2, sizeof(b2), "%d", g_cat.ko);
+		snprintf(c2, sizeof(c2), "%d", g_cat.warn);
+		f[0] = "C";
+		f[1] = g_cat.key;
+		f[2] = g_cat.title;
+		f[3] = a;
+		f[4] = b2;
+		f[5] = c2;
+		m_line(6, f);
+	}
 	g_tot_ok += g_cat.ok;
 	g_tot_ko += g_cat.ko;
 	g_tot_warn += g_cat.warn;
@@ -751,6 +884,22 @@ int	tdf_summary(void)
 		g_tot_ok, g_tot_ko ? C_RED : C_GRN, g_tot_ko,
 		g_tot_warn ? C_YEL : C_GRN, g_tot_warn);
 	causes_summary();
+	{
+		const char	*f[5];
+		char		a[16];
+		char		b2[16];
+		char		c2[16];
+
+		snprintf(a, sizeof(a), "%d", g_tot_ok);
+		snprintf(b2, sizeof(b2), "%d", g_tot_ko);
+		snprintf(c2, sizeof(c2), "%d", g_tot_warn);
+		f[0] = "T";
+		f[1] = TDF_MODE;
+		f[2] = a;
+		f[3] = b2;
+		f[4] = c2;
+		m_line(5, f);
+	}
 	return (g_tot_ko ? 1 : 0);
 }
 
@@ -771,6 +920,19 @@ static void	record(int ko, int warn, const char *file, int line,
 		g_cat.ko++;
 	else
 		g_cat.warn++;
+	{
+		const char	*f[6];
+		char		wh[300];
+
+		snprintf(wh, sizeof(wh), "%s:%d", file ? file : "?", line);
+		f[0] = "R";
+		f[1] = g_cat.key;
+		f[2] = ko ? "KO" : "WARN";
+		f[3] = wh;
+		f[4] = desc ? desc : "";
+		f[5] = msg && msg->p ? msg->p : "";
+		m_line(6, f);
+	}
 	if (ko && !g_opt.verbose)
 	{
 		cause_add(file, line, desc, msg ? msg->p : "");
@@ -786,7 +948,7 @@ static void	record(int ko, int warn, const char *file, int line,
 	bprintf(&g_cat.details, "      %s%s" C_RST " %s:%d  " C_CYA "%s" C_RST "\n",
 		ko ? C_RED : C_YEL, ko ? "✗ KO  " : "⚠ AVERT", file, line, desc);
 	if (msg && msg->len)
-		buf_add(&g_cat.details, msg->p, msg->len);
+		help_filter(&g_cat.details, msg->p, msg->len);
 }
 
 void	tdf_ok(void)
@@ -834,6 +996,7 @@ static int	mktmp(void)
 
 void	tdf_init(void)
 {
+	m_open();
 	g_out = dup(1);
 	setvbuf(stdout, NULL, _IONBF, 0);
 	g_expfd = mktmp();

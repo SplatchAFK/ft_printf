@@ -6,23 +6,27 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/09 13:10:13 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/09 19:54:28 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/10 19:16:02 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "../includes/ft_printf.h"
 
-void	ft_put_unsigned_int(unsigned int n)
+int	ft_put_unsigned_int(unsigned int n)
 {
 	if (n > UINT_MAX)
-		return ;
+		return (-1);
 	if (n <= 9)
-		ft_putchar_fd(n + '0', 1);
+		if (ft_putchar_fd(n + '0', 1) == -1)
+			return (-1);
 	if (n >= 10)
 	{
-		ft_putnbr_fd(n / 10, 1);
-		ft_putchar_fd((n % 10) + '0', 1);
+		if (ft_putnbr_fd(n / 10, 1) == -1)
+			return (-1);
+		if (ft_putchar_fd((n % 10) + '0', 1) == -1)
+			return (-1);
 	}
+	return (0);
 }
 
 int	ft_unsigned_intlen(unsigned int n)

@@ -3,17 +3,21 @@
 /*                                                        :::      ::::::::   */
 /*   ft_putstr_fd.c                                     :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: romasant <romasant@learner.42.tech>        +#+  +:+       +#+        */
+/*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/27 22:06:06 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/03 10:20:19 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/10 19:09:23 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "libft.h"
 
-void	ft_putstr_fd(char *s, int fd)
+int	ft_putstr_fd(char *s, int fd)
 {
 	while (*s)
-		ft_putchar_fd(*s++, fd);
+	{
+		if (ft_putchar_fd(*s++, fd) == -1)
+			return (-1);
+	}
+	return (0);
 }

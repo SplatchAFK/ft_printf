@@ -6,7 +6,7 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/03 10:15:22 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/04 12:21:11 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/10 18:41:53 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -55,10 +55,10 @@ char			**ft_split(char const *s1, char c);
 char			*ft_itoa(int n);
 char			*ft_strmapi(char const *s, char (*f) (unsigned int, char));
 void			ft_striteri(char *s, void (*f) (unsigned int, char *));
-void			ft_putchar_fd(char c, int fd);
-void			ft_putstr_fd(char *s, int fd);
+int				ft_putchar_fd(char c, int fd);
+int				ft_putstr_fd(char *s, int fd);
 void			ft_putendl_fd(char *s, int fd);
-void			ft_putnbr_fd(int n, int fd);
+int				ft_putnbr_fd(int n, int fd);
 t_list			*ft_lstnew(void *content);
 void			ft_lstadd_front(t_list **lst, t_list *new);
 unsigned int	ft_lstsize(t_list *lst);

@@ -6,7 +6,7 @@
 /*   By: romasant <romasant@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/11/06 18:09:26 by romasant          #+#    #+#             */
-/*   Updated: 2026/11/09 19:15:59 by romasant         ###   ########.fr       */
+/*   Updated: 2026/11/10 19:21:10 by romasant         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,7 +59,8 @@ int	ft_apply(va_list ap, int result)
 		size_conversion = ft_apply_other(ap, result);
 	else if (result == 8)
 	{
-		ft_putchar_fd('%', 1);
+		if (ft_putchar_fd('%', 1) == -1)
+			return (-1);
 		return (1);
 	}
 	if (size_conversion == -1)

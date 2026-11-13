@@ -11,7 +11,7 @@
 # **************************************************************************** #
 
 CC = cc
-CFLAGS = -c -Wall -Wextra -Werror -g
+CFLAGS = -Wall -Wextra -Werror -g
 SRCS = src/ft_printf.c src/ft_parsing.c src/ft_manage_basic.c src/ft_other.c \
 		src/ft_manage_other.c
 
